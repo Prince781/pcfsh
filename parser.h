@@ -110,7 +110,9 @@ struct llist *tokenize(const char **input);
  * <pipeline> -> <name> <arglist> <stdin_pipe> <pipeline_tail> <stdout_pipe> <amp_op>
  * <pipeline_tail> -> [PIPE] <progname> <arglist> <pipeline_tail> | e
  * <pln_list> -> [SEMICOLON] <pipeline> <pln_list> | e
- * <program> -> <pipeline> <pln_list> | e
+ * <line> -> <pipeline> <pln_list> | e
+ * <lines_list> -> [NEWLINE] <line> <lines_list> | e
+ * <program> -> <line> <lines_list> | e
  */
 
 /* represents a production */
@@ -123,6 +125,8 @@ enum prod {
     PROD_PIPELINE,
     PROD_PIPELINE_TAIL,
     PROD_PLN_LIST,
+    PROD_LINE,
+    PROD_LINES_LIST,
     PROD_PROGRAM,
     /* for when we are at a leaf */
     PROD_TERMINAL
@@ -163,6 +167,14 @@ struct parse {
  * will point to a list of {struct parse_error}s.
  */
 struct parse *rdparser(const char *input, struct parse_error **err_listp);
+
+/**
+ * Determines if a parse tree is empty.
+ */
+static int prstree_empty(struct parse *tree)
+{
+    return tree == NULL || (tree->type != PROD_TERMINAL && tree->lchild == NULL);
+}
 /** end of parser stuff **/
 
 #endif

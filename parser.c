@@ -469,7 +469,7 @@ static struct parse *rdparse_PLN_LIST(const struct link **list,
     return make_treeN(PROD_PLN_LIST, NULL, ch_semicolon, ch_pipeline, ch_pln_list, NULL);
 }
 
-static struct parse *rdparse_PROGRAM(const struct link **list,
+static struct parse *rdparse_LINE(const struct link **list,
         struct parse_error **err_listp)
 {
     struct parse *ch_pipeline = NULL;
@@ -492,7 +492,58 @@ static struct parse *rdparse_PROGRAM(const struct link **list,
         return NULL;
     }
 
-    return make_treeN(PROD_PROGRAM, NULL, ch_pipeline, ch_pln_list, NULL);
+    return make_treeN(PROD_LINE, NULL, ch_pipeline, ch_pln_list, NULL);
+}
+
+
+static struct parse *rdparse_LINES_LIST(const struct link **list,
+        struct parse_error **err_listp)
+{
+    struct parse *ch_newline = NULL;
+    struct parse *ch_line = NULL;
+    struct parse *ch_lines_list = NULL;
+    struct token *cur_tk;
+
+    if (*list == NULL || (cur_tk = (*list)->data)->cat != CAT_NEWLINE) {
+        /* epsilon */
+        return make_tree0(PROD_LINES_LIST, NULL);
+    }
+
+    ch_newline = make_tree0(PROD_TERMINAL, cur_tk);
+    *list = (*list)->next;
+
+    if ((ch_line = rdparse_LINE(list, err_listp)) == NULL
+     || (ch_lines_list = rdparse_LINES_LIST(list, err_listp)) == NULL) {
+        tree_destroy(ch_newline);
+        tree_destroy(ch_line);
+        tree_destroy(ch_lines_list);
+        /* TODO: error */
+        return NULL;
+    }
+
+    return make_treeN(PROD_LINES_LIST, NULL, ch_newline, ch_line, ch_lines_list, NULL);
+}
+
+static struct parse *rdparse_PROGRAM(const struct link **list,
+        struct parse_error **err_listp)
+{
+    struct parse *ch_line = NULL;
+    struct parse *ch_lines_list = NULL;
+    struct token *cur_tk;
+
+    if (*list == NULL || !match_NAME(cur_tk = (*list)->data)) {
+        /* epsilon */
+        return make_tree0(PROD_PROGRAM, NULL);
+    }
+
+    if ((ch_line = rdparse_LINE(list, err_listp)) == NULL
+     || (ch_lines_list = rdparse_LINES_LIST(list, err_listp)) == NULL) {
+        tree_destroy(ch_line);
+        tree_destroy(ch_lines_list);
+        return NULL;
+    }
+
+    return make_treeN(PROD_PROGRAM, NULL, ch_line, ch_lines_list, NULL);
 }
 
 void errlist_destroy(struct parse_error *err_list)

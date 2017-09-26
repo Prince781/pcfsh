@@ -128,12 +128,21 @@ enum prod {
     PROD_TERMINAL
 };
 
+/**
+ * Represents a list of parse errors.
+ * Use errlist_destroy() to clean up.
+ */
 struct parse_error {
     size_t lineno;
     size_t charno;
     char *message;
     struct parse_error *next;
 };
+
+/**
+ * Frees all dynamically-allocated storage for a list of parse errors.
+ */
+void errlist_destroy(struct parse_error *err_list);
 
 /**
  * A n-ary parse tree.
@@ -147,12 +156,13 @@ struct parse {
     struct parse *lchild;
     struct parse *rsibling;
 };
-/** end of parser stuff **/
 
 /**
  * Given a stream of input, returns a parse tree.
- * If parsing failed, 
+ * If parsing failed, returns NULL and *{@err_listp} 
+ * will point to a list of {struct parse_error}s.
  */
-struct parse *rdparser(const char *input);
+struct parse *rdparser(const char *input, struct parse_error **err_listp);
+/** end of parser stuff **/
 
 #endif

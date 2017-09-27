@@ -189,5 +189,4 @@ int prstree_empty(struct parse *tree);
  */
 void prstree_debug(struct parse *tree);
 /** end of parser stuff **/
-
 #endif

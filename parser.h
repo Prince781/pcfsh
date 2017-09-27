@@ -173,14 +173,11 @@ struct parse {
 void tree_destroy(struct parse *tree);
 
 /**
- * Given a stream of input, returns a parse tree. Sets 
- * *{@tokens} to point to a list of tokens.
+ * Given input tokens, returns a parse tree.
  * If parsing failed, returns NULL and *{@err_listp} 
  * will point to a list of {struct parse_error}s.
  */
-struct parse *rdparser(const char *input, 
-        struct parse_error **err_listp,
-        struct llist **tokens);
+struct parse *rdparser(const struct llist *tokens, struct parse_error **err_listp);
 
 /**
  * Determines if a parse tree is empty.

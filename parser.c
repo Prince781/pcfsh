@@ -264,7 +264,7 @@ static void errlist_ppnd(struct parse_error **err_listp,
     struct parse_error *perr = calloc(1, sizeof(struct parse_error));
 
     perr->charno = charno;
-    perr->lineno = lineno;
+    perr->lineno = num_lines + lineno;
     perr->message = strdup(message);
     perr->next = *err_listp;
 
@@ -626,23 +626,14 @@ void errlist_destroy(struct parse_error *err_list)
     }
 }
 
-struct parse *rdparser(const char *input,
-        struct parse_error **err_listp,
-        struct llist **tokens)
+struct parse *rdparser(const struct llist *tokens, struct parse_error **err_listp)
 {
-    struct llist *token_list;
-    const char *end = input;
     struct parse *tree;
     const struct link *first_link;
 
-    token_list = tokenize(&end);
-    first_link = token_list->head;
+    first_link = tokens->head;
 
     tree = rdparse_PROGRAM(&first_link, err_listp);
-
-    /* cleanup */
-    /* list_destroy(token_list, NULL); */
-    *tokens = token_list;
 
     return tree;
 }

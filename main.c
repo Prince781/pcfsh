@@ -11,8 +11,10 @@ int main(int argc, char *argv[])
         struct llist *token_list = NULL;
         struct parse *tree = NULL;
         struct parse_error *err_list = NULL;
+        const char *after = line;
 
-        tree = rdparser(line, &err_list, &token_list);
+        token_list = tokenize(&after);
+        tree = rdparser(token_list, &err_list);
 
         prstree_debug(tree);
 

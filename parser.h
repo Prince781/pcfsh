@@ -92,6 +92,11 @@ struct token {
 extern size_t num_lines;
 
 /**
+ * frees all memory allocated by a token.
+ */
+void token_destroy(struct token *tk);
+
+/**
  * Returns a NULL-terminated array of tokens.
  * Advances *{@input} right after the last token.
  */
@@ -108,10 +113,10 @@ struct llist *tokenize(const char **input);
  * <stdin_pipe> -> [LANGLE] <name> | e
  * <stdout_pipe> -> [RANGLE] <name> | e
  * <pipeline> -> <name> <arglist> <stdin_pipe> <pipeline_tail> <stdout_pipe> <amp_op>
- * <pipeline_tail> -> [PIPE] <progname> <arglist> <pipeline_tail> | e
- * <pln_list> -> [SEMICOLON] <pipeline> <pln_list> | e
+ * <pipeline_tail> -> [PIPE] <name> <arglist> <pipeline_tail> | e
+ * <pln_list> -> [SEMICOLON] <line> | e
  * <line> -> <pipeline> <pln_list> | e
- * <lines_list> -> [NEWLINE] <line> <lines_list> | e
+ * <lines_list> -> [NEWLINE] <program> | e
  * <program> -> <line> <lines_list> | e
  */
 
@@ -162,19 +167,30 @@ struct parse {
 };
 
 /**
- * Given a stream of input, returns a parse tree.
+ * Frees all data allocated by a parse tree.
+ * Does not free the tokens.
+ */
+void tree_destroy(struct parse *tree);
+
+/**
+ * Given a stream of input, returns a parse tree. Sets 
+ * *{@tokens} to point to a list of tokens.
  * If parsing failed, returns NULL and *{@err_listp} 
  * will point to a list of {struct parse_error}s.
  */
-struct parse *rdparser(const char *input, struct parse_error **err_listp);
+struct parse *rdparser(const char *input, 
+        struct parse_error **err_listp,
+        struct llist **tokens);
 
 /**
  * Determines if a parse tree is empty.
  */
-static int prstree_empty(struct parse *tree)
-{
-    return tree == NULL || (tree->type != PROD_TERMINAL && tree->lchild == NULL);
-}
+int prstree_empty(struct parse *tree);
+
+/**
+ * Prints out a parse tree and generates a graph.
+ */
+void prstree_debug(struct parse *tree);
 /** end of parser stuff **/
 
 #endif

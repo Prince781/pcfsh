@@ -5,10 +5,17 @@
 #include <ctype.h>
 #include <string.h>
 #include <stdarg.h>
+#include <unistd.h> /* fork(), exec() */
 
 /* TODO: implement environment variable substitution ? */
 
 size_t num_lines = 0;
+
+void token_destroy(struct token *tk)
+{
+    free(tk->str_data);
+    free(tk);
+}
 
 /**
  * Parse a quoted string, with {@delim} as the delimeter.
@@ -161,6 +168,7 @@ struct llist *tokenize(const char **input)
                     break;
                 case '\n':
                     tk->cat = CAT_NEWLINE;
+                    num_lines++;
                     cur_line++;
                     break;
                 default:
@@ -236,7 +244,7 @@ static struct parse *make_treeN(enum prod type, struct token *token, struct pars
     return tree;
 }
 
-static void tree_destroy(struct parse *tree)
+void tree_destroy(struct parse *tree)
 {
     if (tree == NULL)
         return;
@@ -251,13 +259,13 @@ static void tree_destroy(struct parse *tree)
  * Prepend a new error message onto the error list.
  */
 static void errlist_ppnd(struct parse_error **err_listp,
-        size_t lineno, size_t charno, char *message)
+        size_t lineno, size_t charno, const char *message)
 {
     struct parse_error *perr = calloc(1, sizeof(struct parse_error));
 
     perr->charno = charno;
     perr->lineno = lineno;
-    perr->message = message;
+    perr->message = strdup(message);
     perr->next = *err_listp;
 
     *err_listp = perr;
@@ -279,8 +287,8 @@ static struct parse *rdparse_NAME(const struct link **list,
 
     if (*list == NULL || !match_NAME(cur_tk = (*list)->data)) {
         /* TODO */
-        errlist_ppnd(err_listp, cur_tk->lineno, cur_tk->charno, 
-                strdup("Expected an argument, a string, or a path."));
+        errlist_ppnd(err_listp, cur_tk->lineno, cur_tk->charno,
+                "Expected an argument, a string, or a path.");
         return NULL;
     }
 
@@ -298,6 +306,13 @@ static struct parse *rdparse_ARGLIST(const struct link **list,
     struct token *cur_tk = NULL;
 
     if (*list == NULL || !match_NAME(cur_tk = (*list)->data)) {
+        if (*list != NULL && cur_tk->cat == CAT_ERROR) {
+            errlist_ppnd(err_listp, cur_tk->lineno, 
+                    cur_tk->charno, cur_tk->str_data);
+            /* error */
+            return NULL;
+        }
+
         /* epsilon */
         return make_tree0(PROD_ARGLIST, NULL);
     }
@@ -320,6 +335,13 @@ static struct parse *rdparse_AMP_OP(const struct link **list,
     struct token *cur_tk;
 
     if (*list == NULL || (cur_tk = (*list)->data)->cat != CAT_AMPERSAND) {
+        if (*list != NULL && cur_tk->cat == CAT_ERROR) {
+            errlist_ppnd(err_listp, cur_tk->lineno, 
+                    cur_tk->charno, cur_tk->str_data);
+            /* error */
+            return NULL;
+        }
+
         /* epsilon */
         return make_tree0(PROD_AMP_OP, NULL);
     }
@@ -338,6 +360,13 @@ static struct parse *rdparse_STDIN_PIPE(const struct link **list,
     struct token *cur_tk;
 
     if (*list == NULL || (cur_tk = (*list)->data)->cat != CAT_LANGLE) {
+        if (*list != NULL && cur_tk->cat == CAT_ERROR) {
+            errlist_ppnd(err_listp, cur_tk->lineno, 
+                    cur_tk->charno, cur_tk->str_data);
+            /* error */
+            return NULL;
+        }
+
         /* epsilon */
         return make_tree0(PROD_STDIN_PIPE, NULL);
     }
@@ -363,6 +392,13 @@ static struct parse *rdparse_STDOUT_PIPE(const struct link **list,
     struct token *cur_tk;
 
     if (*list == NULL || (cur_tk = (*list)->data)->cat != CAT_RANGLE) {
+        if (*list != NULL && cur_tk->cat == CAT_ERROR) {
+            errlist_ppnd(err_listp, cur_tk->lineno, 
+                    cur_tk->charno, cur_tk->str_data);
+            /* error */
+            return NULL;
+        }
+
         /* epsilon */
         return make_tree0(PROD_STDOUT_PIPE, NULL);
     }
@@ -390,6 +426,13 @@ static struct parse *rdparse_PIPELINE_TAIL(const struct link **list,
     struct token *cur_tk;
 
     if (*list == NULL || (cur_tk = (*list)->data)->cat != CAT_PIPE) {
+        if (*list != NULL && cur_tk->cat == CAT_ERROR) {
+            errlist_ppnd(err_listp, cur_tk->lineno, 
+                    cur_tk->charno, cur_tk->str_data);
+            /* error */
+            return NULL;
+        }
+
         /* epsilon */
         return make_tree0(PROD_PIPELINE_TAIL, NULL);
     }
@@ -441,16 +484,25 @@ static struct parse *rdparse_PIPELINE(const struct link **list,
             ch_progname, ch_arglist, ch_stdin_pipe, ch_pipeline_tail, ch_stdout_pipe, ch_amp_op, NULL);
 }
 
+static struct parse *rdparse_LINE(const struct link **list,
+        struct parse_error **err_listp);
+
 static struct parse *rdparse_PLN_LIST(const struct link **list,
         struct parse_error **err_listp)
 {
     struct parse *ch_semicolon = NULL;
-    struct parse *ch_pipeline = NULL;
-    struct parse *ch_pln_list = NULL;
+    struct parse *ch_line = NULL;
 
     struct token *cur_tk;
 
     if (*list == NULL || (cur_tk = (*list)->data)->cat != CAT_SEMICOLON) {
+        if (*list != NULL && cur_tk->cat == CAT_ERROR) {
+            errlist_ppnd(err_listp, cur_tk->lineno, 
+                    cur_tk->charno, cur_tk->str_data);
+            /* error */
+            return NULL;
+        }
+
         /* epsilon */
         return make_tree0(PROD_PLN_LIST, NULL);
     }
@@ -458,15 +510,13 @@ static struct parse *rdparse_PLN_LIST(const struct link **list,
     ch_semicolon = make_tree0(PROD_TERMINAL, cur_tk);
     (*list) = (*list)->next;
 
-    if ((ch_pipeline = rdparse_PIPELINE(list, err_listp)) == NULL
-     || (ch_pln_list = rdparse_PLN_LIST(list, err_listp)) == NULL) {
+    if ((ch_line = rdparse_LINE(list, err_listp)) == NULL) {
         tree_destroy(ch_semicolon);
-        tree_destroy(ch_pipeline);
-        tree_destroy(ch_pln_list);
+        tree_destroy(ch_line);
         return NULL;
     }
 
-    return make_treeN(PROD_PLN_LIST, NULL, ch_semicolon, ch_pipeline, ch_pln_list, NULL);
+    return make_treeN(PROD_PLN_LIST, NULL, ch_semicolon, ch_line, NULL);
 }
 
 static struct parse *rdparse_LINE(const struct link **list,
@@ -477,8 +527,15 @@ static struct parse *rdparse_LINE(const struct link **list,
     struct token *cur_tk;
 
     if (*list == NULL || !match_NAME(cur_tk = (*list)->data)) {
+        if (*list != NULL && cur_tk->cat == CAT_ERROR) {
+            errlist_ppnd(err_listp, cur_tk->lineno, 
+                    cur_tk->charno, cur_tk->str_data);
+            /* error */
+            return NULL;
+        }
+
         /* epsilon */
-        return make_tree0(PROD_PROGRAM, NULL);
+        return make_tree0(PROD_LINE, NULL);
     }
 
     if ((ch_pipeline = rdparse_PIPELINE(list, err_listp)) == NULL
@@ -495,16 +552,24 @@ static struct parse *rdparse_LINE(const struct link **list,
     return make_treeN(PROD_LINE, NULL, ch_pipeline, ch_pln_list, NULL);
 }
 
+static struct parse *rdparse_PROGRAM(const struct link **list,
+        struct parse_error **err_listp);
 
 static struct parse *rdparse_LINES_LIST(const struct link **list,
         struct parse_error **err_listp)
 {
     struct parse *ch_newline = NULL;
-    struct parse *ch_line = NULL;
-    struct parse *ch_lines_list = NULL;
+    struct parse *ch_program = NULL;
     struct token *cur_tk;
 
     if (*list == NULL || (cur_tk = (*list)->data)->cat != CAT_NEWLINE) {
+        if (*list != NULL && cur_tk->cat == CAT_ERROR) {
+            errlist_ppnd(err_listp, cur_tk->lineno, 
+                    cur_tk->charno, cur_tk->str_data);
+            /* error */
+            return NULL;
+        }
+
         /* epsilon */
         return make_tree0(PROD_LINES_LIST, NULL);
     }
@@ -512,16 +577,14 @@ static struct parse *rdparse_LINES_LIST(const struct link **list,
     ch_newline = make_tree0(PROD_TERMINAL, cur_tk);
     *list = (*list)->next;
 
-    if ((ch_line = rdparse_LINE(list, err_listp)) == NULL
-     || (ch_lines_list = rdparse_LINES_LIST(list, err_listp)) == NULL) {
+    if ((ch_program = rdparse_PROGRAM(list, err_listp)) == NULL) {
         tree_destroy(ch_newline);
-        tree_destroy(ch_line);
-        tree_destroy(ch_lines_list);
+        tree_destroy(ch_program);
         /* TODO: error */
         return NULL;
     }
 
-    return make_treeN(PROD_LINES_LIST, NULL, ch_newline, ch_line, ch_lines_list, NULL);
+    return make_treeN(PROD_LINES_LIST, NULL, ch_newline, ch_program, NULL);
 }
 
 static struct parse *rdparse_PROGRAM(const struct link **list,
@@ -532,6 +595,12 @@ static struct parse *rdparse_PROGRAM(const struct link **list,
     struct token *cur_tk;
 
     if (*list == NULL || !match_NAME(cur_tk = (*list)->data)) {
+        if (*list != NULL && cur_tk->cat == CAT_ERROR) {
+            errlist_ppnd(err_listp, cur_tk->lineno, 
+                    cur_tk->charno, cur_tk->str_data);
+            /* error */
+            return NULL;
+        }
         /* epsilon */
         return make_tree0(PROD_PROGRAM, NULL);
     }
@@ -557,7 +626,9 @@ void errlist_destroy(struct parse_error *err_list)
     }
 }
 
-struct parse *rdparser(const char *input, struct parse_error **err_listp)
+struct parse *rdparser(const char *input,
+        struct parse_error **err_listp,
+        struct llist **tokens)
 {
     struct llist *token_list;
     const char *end = input;
@@ -570,7 +641,103 @@ struct parse *rdparser(const char *input, struct parse_error **err_listp)
     tree = rdparse_PROGRAM(&first_link, err_listp);
 
     /* cleanup */
-    list_destroy(token_list, NULL);
+    /* list_destroy(token_list, NULL); */
+    *tokens = token_list;
 
     return tree;
+}
+
+const char *category_names[] = {
+    [CAT_STRING_DBL] = "[string_dbl]",
+    [CAT_STRING_SNGL] = "[string_sngl]",
+    [CAT_PATH_ABS] = "[path_abs]",
+    [CAT_PATH_REL] = "[path_rel]",
+    [CAT_ARG] = "[argument]",
+    [CAT_PIPE] = "|",
+    [CAT_AMPERSAND] = "&",
+    [CAT_LANGLE] = "<",
+    [CAT_RANGLE] = ">",
+    [CAT_SEMICOLON] = ";",
+    [CAT_NEWLINE] = "[newline]",
+    [CAT_ERROR] = "(parse error)"
+};
+
+const char *production_names[] = {
+    [PROD_NAME] = "<name>",
+    [PROD_ARGLIST] = "<arglist>",
+    [PROD_AMP_OP] = "<amp_op>",
+    [PROD_STDIN_PIPE] = "<stdin_pipe>",
+    [PROD_STDOUT_PIPE] = "<stdout_pipe>",
+    [PROD_PIPELINE] = "<pipeline>",
+    [PROD_PIPELINE_TAIL] = "<pipeline_tail>",
+    [PROD_PLN_LIST] = "<pln_list>",
+    [PROD_LINE] = "<line>",
+    [PROD_LINES_LIST] = "<lines_list>",
+    [PROD_PROGRAM] = "<program>",
+    [PROD_TERMINAL] = "(terminal)"
+};
+
+int prstree_empty(struct parse *tree)
+{
+    return tree == NULL || (tree->type != PROD_TERMINAL && tree->lchild == NULL);
+}
+
+static void prstree_debug2(struct parse *parent, 
+        struct parse *tree, FILE *stream)
+{
+    if (tree->token != NULL) {
+        fprintf(stream, "node%p [label=\"%s\"];\n", tree,
+                category_names[tree->token->cat]);
+        if (match_NAME(tree->token)) {
+            fprintf(stream, "node%p_str_data [label=\"%s\"];\n",
+                    tree, tree->token->str_data);
+            fprintf(stream, "node%p -> node%p_str_data;\n", tree, tree);
+        }
+    } else {
+        fprintf(stream, "node%p [label=\"%s\"];\n", tree, 
+                    production_names[tree->type]);
+    }
+    if (parent != NULL)
+        fprintf(stream, "node%p -> node%p;\n", parent, tree);
+
+    if (!prstree_empty(tree)) {
+        struct parse *child = tree->lchild;
+
+        while (child != NULL) {
+            prstree_debug2(tree, child, stream);
+            child = child->rsibling;
+        }
+    }
+}
+
+void prstree_debug(struct parse *tree)
+{
+    /* set up file */
+    char fname[1024], fname2[1024];
+    FILE *stream;
+
+    if (tree == NULL)
+        return;
+
+    tmpnam(fname);
+    stream = fopen(fname, "a");
+    tmpnam(fname2);
+    fprintf(stream, "digraph G {\n");
+    prstree_debug2(NULL, tree, stream);
+    fprintf(stream, "}");
+
+    fclose(stream);
+
+    pid_t pid;
+
+    if ((pid = fork()) == -1) {
+        perror("fork()");
+    } else if (pid == 0) {
+        /* child */
+        if (execlp("dot", "dot", "-Tpng", fname, "-o", fname2, NULL) == -1) {
+            perror("execlp()");
+        }
+    } else {
+        /* parent */
+    }
 }

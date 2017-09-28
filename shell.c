@@ -136,7 +136,7 @@ static void proc_exec(struct proc *proc, int pgid, int fdin, int fdout, int fder
     }
 
     execvp(proc->name, proc->argv);
-    perror("execvp()");
+    perror(proc->name);
     /* child exits if exec failed */
     exit(EXIT_FAILURE);
 }

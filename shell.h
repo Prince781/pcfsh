@@ -30,6 +30,12 @@ struct job {
 
     bool is_bg;
 
+    /**
+     * If there was a state change and we have
+     * yet to notify the user about it.
+     */
+    bool changed;
+
     struct termios tmodes;
 
     /* List of processes in this pipeline */
@@ -48,7 +54,7 @@ int job_exec(struct an_pipeline *pln);
 /**
  * Waits for a job to be completed.
  */
-void job_wait(const struct job *jb);
+void job_wait(struct job *jb);
 
 void job_background(const struct job *jb, bool to_continue);
 
@@ -56,7 +62,7 @@ void job_foreground(struct job *jb, bool to_continue);
 
 void job_continue(struct job *jb, bool background);
 
-bool jobs_remaining(void);
+void jobs_notifications(void);
 
 /** history **/
 struct histentry {

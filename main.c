@@ -51,6 +51,7 @@ int main(int argc, char *argv[])
 
         /* shell prefix */
         pcfsh_prefix(NULL);
+        jobs_notifications();
     }
 
     free(line);

@@ -78,8 +78,8 @@ static struct an_process *get_process(struct parse *tree)
     char **arg_arr = calloc(proc->num_args, sizeof(*arg_arr));
 
     arg_arr[0] = strdup(proc->progname.fname);
-    for (size_t i=0; i<proc_args->size; ++i)
-        arg_arr[i + 1] = list_remove_start(proc_args);
+    for (size_t i=1; i<proc->num_args-1; ++i)
+        arg_arr[i] = list_remove_start(proc_args);
     
     /**
      * Since we used calloc, the argument list is NULL-terminated.

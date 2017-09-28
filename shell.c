@@ -12,6 +12,7 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <libgen.h>
+#include <assert.h>
 
 /**
  * The process group ID of the shell.
@@ -134,6 +135,12 @@ static void proc_exec(struct proc *proc, int pgid, int fdin, int fdout, int fder
         dup2(fderr, STDERR_FILENO);
         close(fderr);
     }
+
+#ifdef DEBUG_PROC
+    for (size_t i=0; proc->argv[i] != NULL; ++i)
+        fprintf(stderr, "%s ", proc->argv[i]);
+    fprintf(stderr, "\n");
+#endif
 
     execvp(proc->name, proc->argv);
     perror(proc->name);
@@ -305,7 +312,7 @@ int job_exec(struct an_pipeline *pln)
     return 0;
 }
 
-static int proc_update(pid_t pid, int status)
+static int proc_update(pid_t pid, int status, struct job *jb_compare)
 {
     struct proc *p = NULL;
     struct job *jb = NULL;
@@ -323,6 +330,8 @@ static int proc_update(pid_t pid, int status)
                         if (WIFSIGNALED(status))
                             fprintf(stderr, "%d: Terminated by signal %d.\n", (int) pid, WTERMSIG(status));
                     }
+                    if (jb != jb_compare)
+                        jb->changed = true;
                     return 0;
                 }
             }
@@ -334,14 +343,14 @@ static int proc_update(pid_t pid, int status)
     return -1;
 }
 
-void job_wait(const struct job *jb)
+void job_wait(struct job *jb)
 {
     int status;
     pid_t pid;
 
     do {
         pid = waitpid(WAIT_ANY, &status, WCONTINUED | WUNTRACED);
-    } while (proc_update(pid, status) != 0
+    } while (proc_update(pid, status, jb) != 0
             && !jb->procs->stopped
             && !jb->procs->finished);
 }
@@ -391,8 +400,57 @@ void job_continue(struct job *jb, bool background)
         job_foreground(jb, true);
 }
 
-bool jobs_remaining(void)
+void jobs_notifications(void)
 {
-    /* TODO */
-    return false;
+    struct job **jb;
+
+    jb = &jobs;
+    while (*jb != NULL) {
+        if ((*jb)->changed) {
+            int status = (*jb)->procs->status;
+
+            if (WIFSTOPPED(status))
+                fprintf(stderr, "%d: Stopped.\n", (int) (*jb)->pgid);
+            else if (WIFCONTINUED(status))
+                fprintf(stderr, "%d: Continuing.\n", (int) (*jb)->pgid);
+            else if (WIFSIGNALED(status))
+                fprintf(stderr, "%d: Terminated by signal %d.\n", (int) (*jb)->pgid, WTERMSIG(status));
+
+            (*jb)->changed = false;
+        }
+
+        if ((*jb)->procs->finished) {
+            struct job *job_temp = *jb;
+
+            /* remove the job from the list */
+            *jb = (*jb)->next;
+
+            /* delete the job */
+            job_temp->next = NULL;
+
+            /* close file descriptors */
+            if (job_temp->stdin_fd != shell_input_fd)
+                close(job_temp->stdin_fd);
+            if (job_temp->stdout_fd != STDOUT_FILENO)
+                close(job_temp->stdout_fd);
+            if (job_temp->stderr_fd != STDERR_FILENO)
+                close(job_temp->stderr_fd);
+
+            /* destroy process info */
+            struct proc *p = job_temp->procs;
+            while (p != NULL) {
+                struct proc *p_next = p->next;
+
+                for (size_t i = 0; p->argv[i] != NULL; ++i)
+                    free(p->argv[i]);
+                free(p);
+
+                p = p_next;
+            }
+
+            /* finally, destroy the job */
+            free(job_temp);
+        } else
+            jb = &(*jb)->next;
+    }
 }

@@ -49,7 +49,8 @@ void pcfsh_init(void)
         signal(SIGTSTP, SIG_IGN);
         signal(SIGTTIN, SIG_IGN);
         signal(SIGTTOU, SIG_IGN);
-        signal(SIGCHLD, SIG_IGN);
+        /* we don't want to ignore SIGCHLD
+         * see the NOTES section of wait(2) */
 
         /* put this process in its own process group */
         shell_pgid = getpid();
@@ -97,6 +98,8 @@ static void proc_exec(struct proc *proc, int pgid, int fdin, int fdout, int fder
         /* Set this to belong to a new process group.
          * note that if pgid == 0, then this will set
          * this process to be the group leader (pgid = pid). */
+        if (pgid == 0)
+            pgid = pid;
         setpgid(pid, pgid);
 
         /* set as foreground */
@@ -184,7 +187,7 @@ int job_exec(struct an_pipeline *pln)
     if (pln->file_out != NULL) {
 
         if (pln->file_out->is_rel) {
-            if ((fout_fd = openat(dirfd, pln->file_out->fname, O_RDWR | O_CREAT | O_TRUNC)) == -1) {
+            if ((fout_fd = openat(dirfd, pln->file_out->fname, O_WRONLY | O_CREAT | O_TRUNC)) == -1) {
                 perror("openat()");
                 if (fin_fd != -1)
                     close(fin_fd);
@@ -210,6 +213,9 @@ int job_exec(struct an_pipeline *pln)
     jb->stderr_fd = STDERR_FILENO;
 
     jb->is_bg = pln->is_bg;
+
+    /* cleanup */
+    close(dirfd);
 
     struct proc **lastp = &jb->procs;
 
@@ -325,7 +331,8 @@ int job_wait(const struct job *jb)
         return 0;
     }
 
-    fprintf(stderr, "No child process %d\n", (int) pid);
+    if (pid == -1)
+        perror("wait()");
     return -1;
 }
 

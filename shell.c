@@ -172,14 +172,14 @@ int job_exec(struct an_pipeline *pln)
     if (pln->file_in != NULL) {
         if (pln->file_in->is_rel) {
             if ((fin_fd = openat(dirfd, pln->file_in->fname, O_RDONLY)) == -1) {
-                perror("openat()");
+                perror(pln->file_in->fname);
                 free(jb);
                 close(dirfd);
                 return -1;
             }
         } else {
             if ((fin_fd = open(pln->file_in->fname, O_RDONLY)) == -1) {
-                perror("open()");
+                perror(pln->file_in->fname);
                 free(jb);
                 close(dirfd);
                 return -1;
@@ -197,7 +197,7 @@ int job_exec(struct an_pipeline *pln)
 
         if (pln->file_out->is_rel) {
             if ((fout_fd = openat(dirfd, pln->file_out->fname, O_WRONLY | O_CREAT | O_TRUNC, 0666)) == -1) {
-                perror("openat()");
+                perror(pln->file_out->fname);
                 if (fin_fd != -1 && fin_fd != STDIN_FILENO)
                     close(fin_fd);
                 free(jb);
@@ -206,7 +206,7 @@ int job_exec(struct an_pipeline *pln)
             }
         } else {
             if ((fout_fd = open(pln->file_out->fname, O_WRONLY | O_CREAT | O_TRUNC, 0666)) == -1) {
-                perror("open()");
+                perror(pln->file_out->fname);
                 if (fin_fd != -1 && fin_fd != STDIN_FILENO)
                     close(fin_fd);
                 free(jb);

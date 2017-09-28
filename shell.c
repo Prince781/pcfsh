@@ -89,6 +89,230 @@ void pcfsh_prefix(const char *str)
     write(shell_input_fd, buf, strlen(buf));
 }
 
+/* internal processes */
+
+static int proc_internal_cmd_cd(char **argv, int infile, int outfile)
+{
+    if (argv[1] != NULL) {
+        if (chdir(argv[1]) < 0) {
+            perror(argv[1]);
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static void job_display(const struct job *jb, 
+        bool more_info, 
+        bool display_only_pids,
+        long curjob,
+        int outfile)
+{
+    char buf[1024];
+    /* show all information about this job
+     * job number, current job, process group ID, state, and command that formed the job*/
+    if (more_info || display_only_pids) {
+        size_t padding;
+
+        snprintf(buf, sizeof(buf), "[%ld] ", curjob);
+        padding = strlen(buf);
+        write(outfile, buf, padding);
+
+        for (struct proc *p = jb->procs; p != NULL; p = p->next) {
+            if (p->pid == jb->pgid)
+                write(outfile, "+ ", 2);
+            /* write PID */
+            if (!display_only_pids || p->pid == jb->pgid) {
+                snprintf(buf, sizeof(buf), "%6d ", p->pid);
+                write(outfile, buf, strlen(buf));
+            } else {
+                write(outfile, "       ", 7);
+            }
+
+            /* write state */
+            if (job_stopped(jb))
+                snprintf(buf, sizeof(buf), "stopped ");
+            else
+                snprintf(buf, sizeof(buf), "running ");
+            write(outfile, buf, strlen(buf));
+            /* display command */
+            write(outfile, p->name, strlen(p->name));
+            write(outfile, "\n", 1);
+        }
+    } else {
+        snprintf(buf, sizeof(buf), "[%ld] + ", curjob);
+        write(outfile, buf, strlen(buf));
+        if (job_stopped(jb))
+            snprintf(buf, sizeof(buf), "stopped ");
+        else
+            snprintf(buf, sizeof(buf), "running ");
+        write(outfile, buf, strlen(buf));
+        /* display command */
+        write(outfile, jb->cmdline, strlen(jb->cmdline));
+        write(outfile, "\n", 1);
+    }
+}
+
+static int proc_internal_cmd_jobs(char **argv, int infile, int outfile)
+{
+    char **argp;
+    /**
+     * this is option is mutually exclusive with
+     * the other */
+    bool more_info = false;         /* -l option */
+    bool display_only_pids = false; /* -p option */
+    long job_id = 0;
+
+    argp = argv + 1;
+    while (*argp != NULL) {
+        if (strcmp(*argp, "-l") == 0)
+            more_info = true;
+        else if (strcmp(*argp, "-p") == 0)
+            display_only_pids = true;
+        else {
+            job_id = strtol(*argp, NULL, 0);
+            if (job_id <= 0 || errno == ERANGE) {
+                fprintf(stderr, "jobs: invalid job_id %s\n", *argp);
+                return -1;
+            }
+        }
+        ++argp;
+    }
+
+    long curjob = 1;
+    struct job *jb = jobs;
+
+    while (jb != NULL) {
+        if (job_id > 0 && curjob != job_id) {
+            ++curjob;
+            jb = jb->next;
+            continue;
+        }
+
+        job_display(jb, more_info, display_only_pids, curjob, outfile);
+
+        ++curjob;
+        jb = jb->next;
+    }
+
+    if (job_id > curjob) {
+        fprintf(stderr, "jobs: invalid job_id %ld\n", job_id);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int proc_internal_cmd_fg(char **argv, int infile, int outfile)
+{
+    char **argp;
+    long job_id = 0;
+
+    argp = argv + 1;
+    while (*argp != NULL) {
+        job_id = strtol(*argp, NULL, 0);
+        if (job_id <= 0 || errno == ERANGE) {
+            fprintf(stderr, "fg: invalid job_id %s\n", *argp);
+            return -1;
+        }
+    }
+
+    /* take a specific job and move it to the foreground */
+    if (job_id > 0) {
+        struct job *jb = jobs;
+        long curjob = 1;
+
+        while (jb != NULL) {
+            if (job_id == curjob) {
+                job_foreground(jb, true);
+                return 0;
+            }
+            jb = jb->next;
+            ++curjob;
+        }
+
+        fprintf(stderr, "fg: invalid job_id %ld\n", job_id);
+        return -1;
+    }
+
+    /* take the most recent job and move it to the foreground */
+    if (jobs != NULL)
+        job_foreground(jobs, true);
+    return 0;
+}
+
+static int proc_internal_cmd_bg(char **argv, int infile, int outfile)
+{
+    char **argp;
+    long job_id = 0;
+
+    argp = argv + 1;
+    while (*argp != NULL) {
+        job_id = strtol(*argp, NULL, 0);
+        if (job_id <= 0 || errno == ERANGE) {
+            fprintf(stderr, "bg: invalid job_id %s\n", *argp);
+            return -1;
+        }
+    }
+
+    /* take a specific job and move it to the background */
+    if (job_id > 0) {
+        struct job *jb = jobs;
+        long curjob = 1;
+
+        while (jb != NULL) {
+            if (job_id == curjob) {
+                job_background(jb, true);
+                return 0;
+            }
+            jb = jb->next;
+            ++curjob;
+        }
+
+        fprintf(stderr, "bg: invalid job_id %ld\n", job_id);
+        return -1;
+    }
+
+    /* take the most recent job and move it to the background */
+    if (jobs != NULL)
+        job_background(jobs, true);
+    return 0;
+}
+
+static int proc_internal_cmd_exit(char **argv, int infile, int outfile)
+{
+    char **argp;
+    long exit_status = 0;
+
+    argp = argv + 1;
+
+    /* try parsing the parameter */
+    if (*argp != NULL) {
+        exit_status = strtol(*argp, NULL, 0);
+        if (errno == ERANGE)
+            exit_status = 0;
+    }
+
+    exit(exit_status);
+}
+
+static intproc proc_internal_get(const char *cmdname)
+{
+    if (strcmp(cmdname, "cd") == 0)
+        return &proc_internal_cmd_cd;
+    if (strcmp(cmdname, "jobs") == 0)
+        return &proc_internal_cmd_jobs;
+    if (strcmp(cmdname, "fg") == 0)
+        return &proc_internal_cmd_fg;
+    if (strcmp(cmdname, "bg") == 0)
+        return &proc_internal_cmd_bg;
+    if (strcmp(cmdname, "exit") == 0)
+        return &proc_internal_cmd_exit;
+    return NULL;
+}
+
+/* internal processes */
+
 static void proc_exec(struct proc *proc, int pgid, int fdin, int fdout, int fderr, bool is_bg)
 {
     /* we only care about job control if we're on a tty */
@@ -230,6 +454,9 @@ int job_exec(struct an_pipeline *pln)
 
     struct proc **lastp = &jb->procs;
 
+    size_t cmdline_size = 1;
+    jb->cmdline = calloc(1, 1);
+
     /* now, create the processes */
     for (struct link *lnk = pln->procs->head;
             lnk != NULL;
@@ -241,8 +468,16 @@ int job_exec(struct an_pipeline *pln)
 
         proc = calloc(1, sizeof(*proc));
         proc->argv = calloc(anproc->num_args, sizeof(proc->argv[0]));
-        for (size_t i=0; i<anproc->num_args; ++i)
+        for (size_t i=0; i<anproc->num_args; ++i) {
             proc->argv[i] = anproc->args[i] != NULL ? strdup(anproc->args[i]) : NULL;
+            if (proc->argv[i] != NULL) {
+                size_t arglen = strlen(proc->argv[i]) + 1;
+
+                jb->cmdline = realloc(jb->cmdline, cmdline_size + arglen);
+                strncat(&jb->cmdline[cmdline_size-1], proc->argv[i], arglen-1);
+                cmdline_size += arglen;
+            }
+        }
         proc->name = proc->argv[0];
 
         *lastp = proc;
@@ -268,27 +503,34 @@ int job_exec(struct an_pipeline *pln)
         } else
             fout_fd = jb->stdout_fd;
 
-        /* now fork */
-        child_pid = fork();
-        if (child_pid < 0) {
-            /* fork failed */
-            perror("fork()");
-            /* TODO: don't terminate */
-            exit(EXIT_FAILURE);
-        } else if (child_pid == 0) {
-            /* child */
-            proc_exec(p, jb->pgid, fin_fd, fout_fd, jb->stderr_fd, jb->is_bg);
-        } else {
-            /* parent */
-            p->pid = child_pid;
+        intproc internal_proc = proc_internal_get(p->name);
 
-            /* we only care about job control if we're
-             * on a tty */
-            if (interactive) {
-                if (jb->pgid == 0)
-                    jb->pgid = child_pid;
-                /* set child to belong to the job group */
-                setpgid(child_pid, jb->pgid);
+        if (internal_proc != NULL) {
+            (*internal_proc)(p->argv, fin_fd, fout_fd);
+            p->finished = true;
+        } else {
+            /* now fork */
+            child_pid = fork();
+            if (child_pid < 0) {
+                /* fork failed */
+                perror("fork()");
+                /* TODO: don't terminate */
+                exit(EXIT_FAILURE);
+            } else if (child_pid == 0) {
+                /* child */
+                proc_exec(p, jb->pgid, fin_fd, fout_fd, jb->stderr_fd, jb->is_bg);
+            } else {
+                /* parent */
+                p->pid = child_pid;
+
+                /* we only care about job control if we're
+                 * on a tty */
+                if (interactive) {
+                    if (jb->pgid == 0)
+                        jb->pgid = child_pid;
+                    /* set child to belong to the job group */
+                    setpgid(child_pid, jb->pgid);
+                }
             }
         }
 
@@ -451,31 +693,11 @@ void jobs_notifications(void)
             /* remove the job from the list */
             *jb = (*jb)->next;
 
-            /* delete the job */
+            /* do this just for better debugging */
             job_temp->next = NULL;
 
-            /* close file descriptors */
-            if (job_temp->stdin_fd != shell_input_fd)
-                close(job_temp->stdin_fd);
-            if (job_temp->stdout_fd != STDOUT_FILENO)
-                close(job_temp->stdout_fd);
-            if (job_temp->stderr_fd != STDERR_FILENO)
-                close(job_temp->stderr_fd);
-
-            /* destroy process info */
-            struct proc *p = job_temp->procs;
-            while (p != NULL) {
-                struct proc *p_next = p->next;
-
-                for (size_t i = 0; p->argv[i] != NULL; ++i)
-                    free(p->argv[i]);
-                free(p);
-
-                p = p_next;
-            }
-
-            /* finally, destroy the job */
-            free(job_temp);
+            /* destroy the job */
+            job_destroy(job_temp);
             continue;   /* don't iterate to next job */
         }
         
@@ -498,4 +720,32 @@ void jobs_notifications(void)
         jb = &(*jb)->next;
         ++job_id;
     }
+}
+
+void job_destroy(struct job *jb)
+{
+    /* close file descriptors */
+    if (jb->stdin_fd != shell_input_fd)
+        close(jb->stdin_fd);
+    if (jb->stdout_fd != STDOUT_FILENO)
+        close(jb->stdout_fd);
+    if (jb->stderr_fd != STDERR_FILENO)
+        close(jb->stderr_fd);
+
+    /* destroy process info */
+    struct proc *p = jb->procs;
+    while (p != NULL) {
+        struct proc *p_next = p->next;
+
+        for (size_t i = 0; p->argv[i] != NULL; ++i)
+            free(p->argv[i]);
+        free(p);
+
+        p = p_next;
+    }
+
+    free(jb->cmdline);
+
+    /* finally, destroy the job */
+    free(jb);
 }

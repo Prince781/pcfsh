@@ -5,6 +5,11 @@
 #include <termios.h>
 #include "analyzer.h"
 
+/**
+ * Defines an internal process handler.
+ */
+typedef int (*intproc)(char **argv, int infile, int outfile);
+
 struct proc {
     pid_t pid;
 
@@ -38,6 +43,11 @@ struct job {
 
     struct termios tmodes;
 
+    /**
+     * For displaying messages.
+     */
+    char *cmdline;
+
     /* List of processes in this pipeline */
     struct proc *procs;
 
@@ -69,6 +79,8 @@ void job_foreground(struct job *jb, bool to_continue);
 void job_continue(struct job *jb, bool background);
 
 void jobs_notifications(void);
+
+void job_destroy(struct job *jb);
 
 /** history **/
 struct histentry {

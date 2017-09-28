@@ -273,6 +273,8 @@ int job_exec(struct an_pipeline *pln)
         if (child_pid < 0) {
             /* fork failed */
             perror("fork()");
+            /* TODO: don't terminate */
+            exit(EXIT_FAILURE);
         } else if (child_pid == 0) {
             /* child */
             proc_exec(p, jb->pgid, fin_fd, fout_fd, jb->stderr_fd, jb->is_bg);
@@ -356,7 +358,7 @@ static int proc_update(pid_t pid, int status, struct job *jb_compare)
                 }
             }
         /* we did not find the process */
-        fprintf(stderr, "%d: Process not found.\n", (int) pid);
+        fprintf(stderr, "Process %d not found.\n", (int) pid);
         return -1;
     } else if (pid == 0 || errno == ECHILD) {
         return -1;

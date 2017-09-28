@@ -54,9 +54,6 @@ int main(int argc, char *argv[])
         pcfsh_prefix(NULL);
     }
 
-    perror("getline");
-    fprintf(stderr, "EOF\n");
-
     free(line);
 
     return 0;

@@ -92,6 +92,9 @@ void list_destroy(struct llist *list, void (*dtor_func)(void *))
     struct link *link;
     struct link *oldlnk;
 
+    if (list == NULL)
+        return;
+
     link = list->head;
     while (link != NULL) {
         if (dtor_func != NULL)

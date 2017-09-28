@@ -43,6 +43,7 @@ void *list_remove_start(struct llist *list);
 /**
  * free every element in this list and call a destructor function,
  * {@dtor_func} on each record if {@dtor_func} != NULL.
+ * Returns if {@list} is NULL.
  */
 void list_destroy(struct llist *list, void (*dtor_func)(void *));
 

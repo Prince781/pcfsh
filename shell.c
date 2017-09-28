@@ -305,35 +305,45 @@ int job_exec(struct an_pipeline *pln)
     return 0;
 }
 
-int job_wait(const struct job *jb)
+static int proc_update(pid_t pid, int status)
+{
+    struct proc *p = NULL;
+    struct job *jb = NULL;
+
+    if (pid > 0) {
+        for (jb = jobs; jb != NULL; jb = jb->next)
+            for (p = jb->procs; p != NULL; p = p->next) {
+                if (p->pid == pid) {
+                    p->status = status;
+                    if (WIFSTOPPED(status)) {
+                        p->stopped = true;
+                        fprintf(stderr, "%d: Stopped.\n", (int) pid);
+                    } else {
+                        p->finished = true;
+                        if (WIFSIGNALED(status))
+                            fprintf(stderr, "%d: Terminated by signal %d.\n", (int) pid, WTERMSIG(status));
+                    }
+                    return 0;
+                }
+            }
+    } else if (pid == 0 || errno == ECHILD) {
+        return -1;
+    } else {
+        perror("waitpid");
+    }
+    return -1;
+}
+
+void job_wait(const struct job *jb)
 {
     int status;
     pid_t pid;
 
-    /* restart waitpid() if it was interrupted */
-    while ((pid = waitpid(-jb->pgid, &status, WCONTINUED | WUNTRACED)) == -1 
-            && errno == EINTR);
-
-    struct proc *p = jb->procs;
-    while (p != NULL && p->pid != pid)
-        p = p->next;
-
-    if (p != NULL) {
-        p->status = status;
-        if (WIFSTOPPED(status)) {
-            p->stopped = true;
-            fprintf(stderr, "%d: Stopped.\n", (int) pid);
-        } else {
-            p->finished = true;
-            if (WIFSIGNALED(status))
-                fprintf(stderr, "%d: Terminated by signal %d.\n", (int) pid, WTERMSIG(status));
-        }
-        return 0;
-    }
-
-    if (pid == -1)
-        perror("wait()");
-    return -1;
+    do {
+        pid = waitpid(WAIT_ANY, &status, WCONTINUED | WUNTRACED);
+    } while (proc_update(pid, status) != 0
+            && !jb->procs->stopped
+            && !jb->procs->finished);
 }
 
 void job_background(const struct job *jb, bool to_continue)

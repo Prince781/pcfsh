@@ -46,9 +46,9 @@ void pcfsh_prefix(const char *str);
 int job_exec(struct an_pipeline *pln);
 
 /**
- * Waits for a job to be completed. Returns 0 on success.
+ * Waits for a job to be completed.
  */
-int job_wait(const struct job *jb);
+void job_wait(const struct job *jb);
 
 void job_background(const struct job *jb, bool to_continue);
 
@@ -57,5 +57,11 @@ void job_foreground(struct job *jb, bool to_continue);
 void job_continue(struct job *jb, bool background);
 
 bool jobs_remaining(void);
+
+/** history **/
+struct histentry {
+    char *line;
+};
+/** end of history stuff **/
 
 #endif

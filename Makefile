@@ -1,6 +1,6 @@
 SOURCES=$(wildcard *.c) $(wildcard ds/*.c)
 OBJECTS=$(SOURCES:%.c=%.o)
-CFLAGS=-Wall -Werror -g -ggdb3 -O0 -DPARSETREE_DEBUG -DDEBUG_PROC
+CFLAGS=-Wall -Werror -g -ggdb3 -O0
 BINARY=pcfsh
 
 .PHONY: clean

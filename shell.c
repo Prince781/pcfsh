@@ -187,8 +187,10 @@ int job_exec(struct an_pipeline *pln)
         }
 
         jb->stdin_fd = fin_fd;
-    } else
+    } else {
         jb->stdin_fd = shell_input_fd;
+        fin_fd = jb->stdin_fd;
+    }
 
     /* set standard output */
     if (pln->file_out != NULL) {
@@ -214,8 +216,10 @@ int job_exec(struct an_pipeline *pln)
         }
 
         jb->stdout_fd = fout_fd;
-    } else
+    } else {
         jb->stdout_fd = STDOUT_FILENO;
+        fout_fd = jb->stdout_fd;
+    }
 
     jb->stderr_fd = STDERR_FILENO;
 
@@ -312,6 +316,22 @@ int job_exec(struct an_pipeline *pln)
     return 0;
 }
 
+bool job_stopped(const struct job *jb)
+{
+    for (struct proc *p = jb->procs; p != NULL; p = p->next)
+        if (!p->stopped)
+            return false;
+    return true;
+}
+
+bool job_finished(const struct job *jb)
+{
+    for (struct proc *p = jb->procs; p != NULL; p = p->next)
+        if (!p->finished)
+            return false;
+    return true;
+}
+
 static int proc_update(pid_t pid, int status, struct job *jb_compare)
 {
     struct proc *p = NULL;
@@ -351,8 +371,8 @@ void job_wait(struct job *jb)
     do {
         pid = waitpid(WAIT_ANY, &status, WCONTINUED | WUNTRACED);
     } while (proc_update(pid, status, jb) != 0
-            && !jb->procs->stopped
-            && !jb->procs->finished);
+            && !job_stopped(jb)
+            && !job_finished(jb));
 }
 
 void job_background(const struct job *jb, bool to_continue)
@@ -419,7 +439,7 @@ void jobs_notifications(void)
             (*jb)->changed = false;
         }
 
-        if ((*jb)->procs->finished) {
+        if (job_finished(*jb)) {
             struct job *job_temp = *jb;
 
             /* remove the job from the list */

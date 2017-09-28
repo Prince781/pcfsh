@@ -51,6 +51,12 @@ void pcfsh_prefix(const char *str);
 
 int job_exec(struct an_pipeline *pln);
 
+/* Returns true if all processes
+ * in the job have stopped. */
+bool job_stopped(const struct job *jb);
+
+bool job_finished(const struct job *jb);
+
 /**
  * Waits for a job to be completed.
  */

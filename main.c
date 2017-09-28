@@ -50,8 +50,8 @@ int main(int argc, char *argv[])
         list_destroy(pipelines, (void (*)(void *))an_pipeline_destroy);
 
         /* shell prefix */
-        pcfsh_prefix(NULL);
         jobs_notifications();
+        pcfsh_prefix(NULL);
     }
 
     free(line);

@@ -718,17 +718,4 @@ void prstree_debug(struct parse *tree)
     fprintf(stream, "}");
 
     fclose(stream);
-
-    pid_t pid;
-
-    if ((pid = fork()) == -1) {
-        perror("fork()");
-    } else if (pid == 0) {
-        /* child */
-        if (execlp("dot", "dot", "-Tpng", fname, "-o", fname2, NULL) == -1) {
-            perror("execlp()");
-        }
-    } else {
-        /* parent */
-    }
 }

@@ -196,18 +196,18 @@ int job_exec(struct an_pipeline *pln)
     if (pln->file_out != NULL) {
 
         if (pln->file_out->is_rel) {
-            if ((fout_fd = openat(dirfd, pln->file_out->fname, O_WRONLY | O_CREAT | O_TRUNC)) == -1) {
+            if ((fout_fd = openat(dirfd, pln->file_out->fname, O_WRONLY | O_CREAT | O_TRUNC, 0666)) == -1) {
                 perror("openat()");
-                if (fin_fd != -1)
+                if (fin_fd != -1 && fin_fd != STDIN_FILENO)
                     close(fin_fd);
                 free(jb);
                 close(dirfd);
                 return -1;
             }
         } else {
-            if ((fout_fd = open(pln->file_out->fname, O_WRONLY | O_CREAT | O_TRUNC)) == -1) {
+            if ((fout_fd = open(pln->file_out->fname, O_WRONLY | O_CREAT | O_TRUNC, 0666)) == -1) {
                 perror("open()");
-                if (fin_fd != -1)
+                if (fin_fd != -1 && fin_fd != STDIN_FILENO)
                     close(fin_fd);
                 free(jb);
                 close(dirfd);
@@ -256,7 +256,7 @@ int job_exec(struct an_pipeline *pln)
 
         /* we want to set up pipes first */
         if (p->next != NULL) {
-            if (pipe(pipefds) == -1) {
+            if (pipe(pipefds) < 0) {
                 perror("pipe()");
                 /* TODO: don't terminate:
                  * 1. kill all running processes
@@ -270,7 +270,7 @@ int job_exec(struct an_pipeline *pln)
 
         /* now fork */
         child_pid = fork();
-        if (child_pid == -1) {
+        if (child_pid < 0) {
             /* fork failed */
             perror("fork()");
         } else if (child_pid == 0) {
@@ -387,8 +387,7 @@ void job_foreground(struct job *jb, bool to_continue)
     /* if the job is suspended, it is no longer controlling
      * the terminal */
 
-    if (interactive)
-        tcsetpgrp(shell_input_fd, jb->pgid);
+    tcsetpgrp(shell_input_fd, jb->pgid);
 
     if (to_continue) {
         kill(-jb->pgid, SIGCONT);
@@ -397,15 +396,13 @@ void job_foreground(struct job *jb, bool to_continue)
     /* wait */
     job_wait(jb);
 
-    if (interactive) {
-        /* job is either stopped or finished.
-         * set this process as the tty controller */
-        tcsetpgrp(shell_input_fd, shell_pgid);
+    /* job is either stopped or finished.
+     * set this process as the tty controller */
+    tcsetpgrp(shell_input_fd, shell_pgid);
 
-        /* save and restore terminal settings */
-        tcgetattr(shell_input_fd, &jb->tmodes);
-        tcsetattr(shell_input_fd, TCSADRAIN, &term_attrs);
-    }
+    /* save and restore terminal settings */
+    tcgetattr(shell_input_fd, &jb->tmodes);
+    tcsetattr(shell_input_fd, TCSADRAIN, &term_attrs);
 }
 
 void job_continue(struct job *jb, bool background)

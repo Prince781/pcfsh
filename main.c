@@ -39,6 +39,7 @@ int main(int argc, char *argv[])
             /* if parsing went well, analyze it */
             pipelines = analyze_pipelines(tree);
 
+            /* execute all pipelines */
             for (struct link *lnk = pipelines->head; lnk != NULL; lnk = lnk->next)
                 job_exec(lnk->data);
         }
@@ -49,8 +50,9 @@ int main(int argc, char *argv[])
         errlist_destroy(err_list);
         list_destroy(pipelines, (void (*)(void *))an_pipeline_destroy);
 
-        /* shell prefix */
+        /* update statuses and get notifications */
         jobs_notifications();
+        /* shell prefix */
         pcfsh_prefix(NULL);
     }
 

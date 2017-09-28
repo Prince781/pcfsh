@@ -31,10 +31,10 @@ struct job {
     bool is_bg;
 
     /**
-     * If there was a state change and we have
-     * yet to notify the user about it.
+     * If we have notified the user of
+     * a state change already.
      */
-    bool changed;
+    bool notified;
 
     struct termios tmodes;
 

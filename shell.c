@@ -334,31 +334,32 @@ bool job_finished(const struct job *jb)
     return true;
 }
 
-static int proc_update(pid_t pid, int status, struct job *jb_compare)
+static int proc_update(pid_t pid, int status) 
 {
     struct proc *p = NULL;
     struct job *jb = NULL;
+    int job_id = 1;
 
     if (pid > 0) {
-        for (jb = jobs; jb != NULL; jb = jb->next)
+        for (jb = jobs; jb != NULL; jb = jb->next) {
             for (p = jb->procs; p != NULL; p = p->next) {
                 if (p->pid == pid) {
                     p->status = status;
                     if (WIFSTOPPED(status)) {
                         p->stopped = true;
-                        fprintf(stderr, "%d: Stopped.\n", (int) pid);
                     } else {
                         p->finished = true;
                         if (WIFSIGNALED(status))
-                            fprintf(stderr, "%d: Terminated by signal %d.\n", (int) pid, WTERMSIG(status));
+                            fprintf(stderr, "[%d] %d Terminated by signal %d.\n", job_id, (int) pid, WTERMSIG(status));
                     }
-                    if (jb != jb_compare)
-                        jb->changed = true;
+                    jb->notified = false;
                     return 0;
                 }
             }
+            ++job_id;
+        }
         /* we did not find the process */
-        fprintf(stderr, "Process %d not found.\n", (int) pid);
+        fprintf(stderr, "[%d] %d not found.\n", job_id, (int) pid);
         return -1;
     } else if (pid == 0 || errno == ECHILD) {
         return -1;
@@ -378,7 +379,7 @@ void job_wait(struct job *jb)
      */
     do {
         pid = waitpid(WAIT_ANY, &status, WUNTRACED);
-    } while (proc_update(pid, status, jb) == 0
+    } while (proc_update(pid, status) == 0
             && !job_stopped(jb)
             && !job_finished(jb));
 }
@@ -419,6 +420,9 @@ void job_continue(struct job *jb, bool background)
     for (struct proc *p = jb->procs; p != NULL; p = p->next)
         p->stopped = false;
 
+    /* we need to notify the user that the job's state has changed */
+    jb->notified = false;
+
     jb->is_bg = background;
     if (background)
         job_background(jb, true);
@@ -429,22 +433,18 @@ void job_continue(struct job *jb, bool background)
 void jobs_notifications(void)
 {
     struct job **jb;
+    int job_id;
+    pid_t pid;
+    int status;
+
+    /* update job statuses */
+    do {
+        pid = waitpid(WAIT_ANY, &status, WNOHANG);
+    } while (proc_update(pid, status) == 0);
 
     jb = &jobs;
+    job_id = 1;
     while (*jb != NULL) {
-        if ((*jb)->changed) {
-            int status = (*jb)->procs->status;
-
-            if (WIFSTOPPED(status))
-                fprintf(stderr, "%d: Stopped.\n", (int) (*jb)->pgid);
-            else if (WIFCONTINUED(status))
-                fprintf(stderr, "%d: Continuing.\n", (int) (*jb)->pgid);
-            else if (WIFSIGNALED(status))
-                fprintf(stderr, "%d: Terminated by signal %d.\n", (int) (*jb)->pgid, WTERMSIG(status));
-
-            (*jb)->changed = false;
-        }
-
         if (job_finished(*jb)) {
             struct job *job_temp = *jb;
 
@@ -476,7 +476,26 @@ void jobs_notifications(void)
 
             /* finally, destroy the job */
             free(job_temp);
-        } else
-            jb = &(*jb)->next;
+            continue;   /* don't iterate to next job */
+        }
+        
+        if (job_stopped(*jb) && !(*jb)->notified) {
+            struct job *job_temp = *jb;
+
+            /* notify the user about a recently stopped job */
+            job_temp->notified = true;
+
+            /* print information about each process in the job */
+            for (struct proc *p = job_temp->procs;
+                    p != NULL; p = p->next) {
+                fprintf(stderr, "[%d] %d stopped ", job_id, (int) p->pid);
+                for (int i=0; p->argv[i] != NULL; ++i)
+                    fprintf(stderr, "%s ", p->argv[i]);
+                fprintf(stderr, "\n");
+            }
+        }
+
+        jb = &(*jb)->next;
+        ++job_id;
     }
 }

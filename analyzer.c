@@ -207,7 +207,7 @@ struct llist *analyze_pipelines(struct parse *tree)
     list_append(pathnodes, tree);
 
     while (pathnodes->size != 0) {
-        struct parse *node = list_remove_end(pathnodes);
+        struct parse *node = list_remove_start(pathnodes);
 
         switch (node->type) {
             case PROD_PROGRAM:

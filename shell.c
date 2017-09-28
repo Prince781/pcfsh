@@ -355,6 +355,9 @@ static int proc_update(pid_t pid, int status, struct job *jb_compare)
                     return 0;
                 }
             }
+        /* we did not find the process */
+        fprintf(stderr, "%d: Process not found.\n", (int) pid);
+        return -1;
     } else if (pid == 0 || errno == ECHILD) {
         return -1;
     } else {
@@ -368,9 +371,12 @@ void job_wait(struct job *jb)
     int status;
     pid_t pid;
 
+    /**
+     * wait for all processes in the job to finish or stop
+     */
     do {
-        pid = waitpid(WAIT_ANY, &status, WCONTINUED | WUNTRACED);
-    } while (proc_update(pid, status, jb) != 0
+        pid = waitpid(WAIT_ANY, &status, WUNTRACED);
+    } while (proc_update(pid, status, jb) == 0
             && !job_stopped(jb)
             && !job_finished(jb));
 }
@@ -384,12 +390,13 @@ void job_background(const struct job *jb, bool to_continue)
 
 void job_foreground(struct job *jb, bool to_continue)
 {
-    /* if the job is suspended, it is no longer controlling
-     * the terminal */
-
+    /* If the job was suspended or in the background, 
+     * it is no longer controlling the terminal.
+     * Therefore we have to call this again. */
     tcsetpgrp(shell_input_fd, jb->pgid);
 
     if (to_continue) {
+        tcsetattr(shell_input_fd, TCSADRAIN, &jb->tmodes);
         kill(-jb->pgid, SIGCONT);
     }
 

@@ -68,6 +68,12 @@ bool job_stopped(const struct job *jb);
 bool job_finished(const struct job *jb);
 
 /**
+ * Determines if all of the processes in the job
+ * are internal processes.
+ */
+bool job_is_internal(const struct job *jb);
+
+/**
  * Waits for a job to be completed.
  */
 void job_wait(struct job *jb);

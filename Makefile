@@ -1,7 +1,7 @@
 SOURCES=$(wildcard *.c) $(wildcard ds/*.c)
 OBJECTS=$(SOURCES:%.c=%.o)
 CFLAGS=-Wall -Werror -g -ggdb3 -O0
-BINARY=pcfsh
+BINARY=shell
 
 .PHONY: clean
 

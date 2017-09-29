@@ -553,6 +553,12 @@ int job_exec(struct an_pipeline *pln)
     jb->next = jobs;
     jobs = jb;
 
+    /**
+     * Don't wait for an internal job.
+     */
+    if (job_is_internal(jb))
+        return 0;
+
     /* now we should wait for our job */
     if (!interactive)
         job_wait(jb);
@@ -593,6 +599,8 @@ static int proc_update(pid_t pid, int status)
                     p->status = status;
                     if (WIFSTOPPED(status)) {
                         p->stopped = true;
+                    } else if (WIFCONTINUED(status)) {
+                        p->stopped = false;
                     } else {
                         p->finished = true;
                         if (WIFSIGNALED(status))
@@ -615,11 +623,7 @@ static int proc_update(pid_t pid, int status)
     return -1;
 }
 
-/**
- * Determines if all of the processes in the job
- * are internal processes.
- */
-static bool job_is_internal(const struct job *jb)
+bool job_is_internal(const struct job *jb)
 {
     for (struct proc *p = jb->procs; p != NULL; p = p->next)
         if (p->pid != 0)
@@ -634,12 +638,6 @@ void job_wait(struct job *jb)
     pid_t pid;
 
     /**
-     * Don't wait for an internal job.
-     */
-    if (job_is_internal(jb))
-        return;
-
-    /**
      * wait for all processes in the job to finish or stop
      */
     do {
@@ -652,7 +650,8 @@ void job_wait(struct job *jb)
 void job_background(const struct job *jb, bool to_continue)
 {
     if (to_continue) {
-        kill(-jb->pgid, SIGCONT);
+        if (kill(-jb->pgid, SIGCONT) < 0)
+            perror("kill");
     }
 }
 
@@ -661,11 +660,14 @@ void job_foreground(struct job *jb, bool to_continue)
     /* If the job was suspended or in the background, 
      * it is no longer controlling the terminal.
      * Therefore we have to call this again. */
-    tcsetpgrp(shell_input_fd, jb->pgid);
+    if (tcsetpgrp(shell_input_fd, jb->pgid) < 0)
+        fprintf(stderr, "Cannot set %d as the controller: %s\n", jb->pgid, strerror(errno));
 
     if (to_continue) {
-        tcsetattr(shell_input_fd, TCSADRAIN, &jb->tmodes);
-        kill(-jb->pgid, SIGCONT);
+        if (tcsetattr(shell_input_fd, TCSADRAIN, &jb->tmodes) < 0)
+            perror("tcsetattr");
+        if (kill(-jb->pgid, SIGCONT) < 0)
+            perror("kill");
     }
 
     /* wait */
@@ -673,7 +675,8 @@ void job_foreground(struct job *jb, bool to_continue)
 
     /* job is either stopped or finished.
      * set this process as the tty controller */
-    tcsetpgrp(shell_input_fd, shell_pgid);
+    if (tcsetpgrp(shell_input_fd, shell_pgid) < 0)
+        fprintf(stderr, "Cannot set %d as the controller: %s\n", shell_pgid, strerror(errno));
 
     /* save and restore terminal settings */
     tcgetattr(shell_input_fd, &jb->tmodes);
@@ -731,7 +734,7 @@ void jobs_notifications(void)
             job_temp->notified = true;
 
             /* print information about each process in the job */
-            job_display(job_temp, false, false, job_id, STDOUT_FILENO);
+            job_display(job_temp, true, false, job_id, STDOUT_FILENO);
         }
 
         jb = &(*jb)->next;

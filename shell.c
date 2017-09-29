@@ -113,12 +113,16 @@ static void job_display(const struct job *jb,
      * job number, current job, process group ID, state, and command that formed the job*/
     if (more_info || display_only_pids) {
         size_t padding;
+        char padbuf[48];
 
         snprintf(buf, sizeof(buf), "[%ld] ", curjob);
         padding = strlen(buf);
         write(outfile, buf, padding);
+        snprintf(padbuf, sizeof(padbuf), "%*s", (int) padding, " ");
 
         for (struct proc *p = jb->procs; p != NULL; p = p->next) {
+            if (p != jb->procs)
+                write(outfile, padbuf, padding);
             if (p->pid == jb->pgid)
                 write(outfile, "+ ", 2);
             /* write PID */
@@ -224,7 +228,7 @@ static int proc_internal_cmd_fg(char **argv, int infile, int outfile)
 
         while (jb != NULL) {
             if (job_id == curjob) {
-                job_foreground(jb, true);
+                job_continue(jb, false);
                 return 0;
             }
             jb = jb->next;
@@ -237,7 +241,7 @@ static int proc_internal_cmd_fg(char **argv, int infile, int outfile)
 
     /* take the most recent job and move it to the foreground */
     if (jobs != NULL)
-        job_foreground(jobs, true);
+        job_continue(jobs, false);
     return 0;
 }
 
@@ -262,7 +266,7 @@ static int proc_internal_cmd_bg(char **argv, int infile, int outfile)
 
         while (jb != NULL) {
             if (job_id == curjob) {
-                job_background(jb, true);
+                job_continue(jb, true);
                 return 0;
             }
             jb = jb->next;
@@ -275,7 +279,7 @@ static int proc_internal_cmd_bg(char **argv, int infile, int outfile)
 
     /* take the most recent job and move it to the background */
     if (jobs != NULL)
-        job_background(jobs, true);
+        job_continue(jobs, true);
     return 0;
 }
 
@@ -611,10 +615,29 @@ static int proc_update(pid_t pid, int status)
     return -1;
 }
 
+/**
+ * Determines if all of the processes in the job
+ * are internal processes.
+ */
+static bool job_is_internal(const struct job *jb)
+{
+    for (struct proc *p = jb->procs; p != NULL; p = p->next)
+        if (p->pid != 0)
+            return false;
+
+    return true;
+}
+
 void job_wait(struct job *jb)
 {
     int status;
     pid_t pid;
+
+    /**
+     * Don't wait for an internal job.
+     */
+    if (job_is_internal(jb))
+        return;
 
     /**
      * wait for all processes in the job to finish or stop
@@ -681,7 +704,7 @@ void jobs_notifications(void)
 
     /* update job statuses */
     do {
-        pid = waitpid(WAIT_ANY, &status, WNOHANG);
+        pid = waitpid(WAIT_ANY, &status, WCONTINUED | WUNTRACED | WNOHANG);
     } while (proc_update(pid, status) == 0);
 
     jb = &jobs;
@@ -701,20 +724,14 @@ void jobs_notifications(void)
             continue;   /* don't iterate to next job */
         }
         
-        if (job_stopped(*jb) && !(*jb)->notified) {
+        if (!(*jb)->notified) {
             struct job *job_temp = *jb;
 
             /* notify the user about a recently stopped job */
             job_temp->notified = true;
 
             /* print information about each process in the job */
-            for (struct proc *p = job_temp->procs;
-                    p != NULL; p = p->next) {
-                fprintf(stderr, "[%d] %d stopped ", job_id, (int) p->pid);
-                for (int i=0; p->argv[i] != NULL; ++i)
-                    fprintf(stderr, "%s ", p->argv[i]);
-                fprintf(stderr, "\n");
-            }
+            job_display(job_temp, false, false, job_id, STDOUT_FILENO);
         }
 
         jb = &(*jb)->next;

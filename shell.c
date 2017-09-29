@@ -104,12 +104,8 @@ struct builtin builtins[] = {
 static void sighandler(int signum, siginfo_t *info, void *context)
 {
     if (signum == SIGCHLD) {
-        /* we want to reset the controller to us */
         if (info->si_code != CLD_CONTINUED) {
-            if (tcsetpgrp(shell_input_fd, shell_pgid) < 0)
-                perror("tcsetpgrp");
-        } else {
-            /* fprintf(stderr, "resumed\n"); */
+            /* TODO */
         }
     }
 }

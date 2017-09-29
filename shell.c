@@ -223,6 +223,7 @@ static int proc_internal_cmd_fg(char **argv, int infile, int outfile)
             fprintf(stderr, "fg: invalid job_id %s\n", *argp);
             return -1;
         }
+        ++argp;
     }
 
     /* take a specific job and move it to the foreground */
@@ -261,6 +262,7 @@ static int proc_internal_cmd_bg(char **argv, int infile, int outfile)
             fprintf(stderr, "bg: invalid job_id %s\n", *argp);
             return -1;
         }
+        ++argp;
     }
 
     /* take a specific job and move it to the background */

@@ -25,6 +25,96 @@ static struct job *jobs = NULL;
 static struct termios term_attrs;
 
 /**
+ * Defines an internal process handler.
+ */
+typedef int (*intproc)(char **argv, int infile, int outfile);
+
+/**
+ * Defines a built-in command.
+ */
+struct builtin {
+    /**
+     * The program name.
+     */
+    const char *name;
+
+    /**
+     * Function pointer.
+     */
+    intproc func;
+
+    /**
+     * A usage example.
+     */
+    const char *usage;
+
+    /**
+     * A short description.
+     */
+    const char *desc;
+};
+
+static int proc_internal_cmd_cd(char **argv, int infile, int outfile);
+static int proc_internal_cmd_jobs(char **argv, int infile, int outfile);
+static int proc_internal_cmd_fg(char **argv, int infile, int outfile);
+static int proc_internal_cmd_bg(char **argv, int infile, int outfile);
+static int proc_internal_cmd_exit(char **argv, int infile, int outfile);
+static int proc_internal_cmd_help(char **argv, int infile, int outfile);
+
+struct builtin builtins[] = {
+    {
+        .name = "cd",
+        .func = proc_internal_cmd_cd,
+        .usage = "cd [path]",
+        .desc = "Change directory."
+    },
+    {
+        .name = "jobs",
+        .func = proc_internal_cmd_jobs,
+        .usage = "jobs [-l|-p] [job_id]",
+        .desc = "Show all jobs. See man jobs(1)"
+    },
+    {
+        .name = "fg",
+        .func = proc_internal_cmd_fg,
+        .usage = "fg [job_id]",
+        .desc = "Set recent job, or specified job, into foreground."
+    },
+    {
+        .name = "bg",
+        .func = proc_internal_cmd_bg,
+        .usage = "bg [job_id]",
+        .desc = "Set recent job, or specified job, int background."
+    },
+    {
+        .name = "exit",
+        .func = proc_internal_cmd_exit,
+        .usage = "exit [status]",
+        .desc = "Exit normally or with status."
+    },
+    {
+        .name = "help",
+        .func = proc_internal_cmd_help,
+        .usage = "help",
+        .desc = "Show help."
+    },
+    { NULL, NULL, NULL }
+};
+
+static void sighandler(int signum, siginfo_t *info, void *context)
+{
+    if (signum == SIGCHLD) {
+        /* we want to reset the controller to us */
+        if (info->si_code != CLD_CONTINUED) {
+            if (tcsetpgrp(shell_input_fd, shell_pgid) < 0)
+                perror("tcsetpgrp");
+        } else {
+            /* fprintf(stderr, "resumed\n"); */
+        }
+    }
+}
+
+/**
  * Note: some of the basic ideas come from this helpful resource:
  * https://www.gnu.org/software/libc/manual/html_node/Initializing-the-Shell.html#Initializing-the-Shell
  */
@@ -66,6 +156,15 @@ void pcfsh_init(void)
 
         /* save terminal attributes */
         tcgetattr(shell_input_fd, &term_attrs);
+
+        /* register signal handler */
+        struct sigaction sa;
+
+        sa.sa_sigaction = sighandler;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = SA_RESTART | SA_SIGINFO;
+
+        sigaction(SIGCHLD, &sa, NULL);
     }
 }
 
@@ -306,22 +405,30 @@ static int proc_internal_cmd_exit(char **argv, int infile, int outfile)
     exit(exit_status);
 }
 
+static int proc_internal_cmd_help(char **argv, int infile, int outfile)
+{
+    char buf[256];
+
+    write(outfile, "PCF Shell Help\n", 15);
+    write(outfile, "==============\n", 15);
+    for (struct builtin *b = &builtins[0]; b->name != NULL; ++b) {
+        snprintf(buf, sizeof(buf), " %s\n%4s%s\n", b->usage, " ", b->desc);
+        write(outfile, buf, strlen(buf));
+    }
+
+    return 0;
+}
+
 static intproc proc_internal_get(const char *cmdname)
 {
-    if (strcmp(cmdname, "cd") == 0)
-        return &proc_internal_cmd_cd;
-    if (strcmp(cmdname, "jobs") == 0)
-        return &proc_internal_cmd_jobs;
-    if (strcmp(cmdname, "fg") == 0)
-        return &proc_internal_cmd_fg;
-    if (strcmp(cmdname, "bg") == 0)
-        return &proc_internal_cmd_bg;
-    if (strcmp(cmdname, "exit") == 0)
-        return &proc_internal_cmd_exit;
+    for (struct builtin *b = &builtins[0]; b->name != NULL; ++b) {
+        if (strcmp(cmdname, b->name) == 0)
+            return b->func;
+    }
     return NULL;
 }
 
-/* internal processes */
+/* end of internal processes */
 
 static void proc_exec(struct proc *proc, int pgid, int fdin, int fdout, int fderr, bool is_bg)
 {

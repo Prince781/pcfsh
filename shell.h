@@ -5,11 +5,6 @@
 #include <termios.h>
 #include "analyzer.h"
 
-/**
- * Defines an internal process handler.
- */
-typedef int (*intproc)(char **argv, int infile, int outfile);
-
 struct proc {
     pid_t pid;
 

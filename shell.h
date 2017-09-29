@@ -36,7 +36,16 @@ struct job {
      */
     bool notified;
 
+    /**
+     * Saved terminal modes.
+     */
     struct termios tmodes;
+
+    /**
+     * If the job has a saved terminal mode
+     * associated with it.
+     */
+    bool tmodes_saved;
 
     /**
      * For displaying messages.

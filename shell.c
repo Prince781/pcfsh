@@ -777,7 +777,7 @@ void job_foreground(struct job *jb, bool to_continue)
         fprintf(stderr, "Cannot set %d as the controller: %s\n", jb->pgid, strerror(errno));
 
     if (to_continue) {
-        if (tcsetattr(shell_input_fd, TCSADRAIN, &jb->tmodes) < 0)
+        if (jb->tmodes_saved && tcsetattr(shell_input_fd, TCSADRAIN, &jb->tmodes) < 0)
             perror("tcsetattr");
         if (kill(-jb->pgid, SIGCONT) < 0)
             perror("kill");
@@ -793,6 +793,7 @@ void job_foreground(struct job *jb, bool to_continue)
 
     /* save and restore terminal settings */
     tcgetattr(shell_input_fd, &jb->tmodes);
+    jb->tmodes_saved = true;
     tcsetattr(shell_input_fd, TCSADRAIN, &term_attrs);
 }
 

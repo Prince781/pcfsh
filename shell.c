@@ -136,6 +136,8 @@ static void job_display(const struct job *jb,
             /* write state */
             if (job_stopped(jb))
                 snprintf(buf, sizeof(buf), "stopped ");
+            else if (job_finished(jb))
+                snprintf(buf, sizeof(buf), "done ");
             else
                 snprintf(buf, sizeof(buf), "running ");
             write(outfile, buf, strlen(buf));
@@ -148,6 +150,8 @@ static void job_display(const struct job *jb,
         write(outfile, buf, strlen(buf));
         if (job_stopped(jb))
             snprintf(buf, sizeof(buf), "stopped ");
+        else if (job_finished(jb))
+            snprintf(buf, sizeof(buf), "done ");
         else
             snprintf(buf, sizeof(buf), "running ");
         write(outfile, buf, strlen(buf));
@@ -721,6 +725,9 @@ void jobs_notifications(void)
 
             /* do this just for better debugging */
             job_temp->next = NULL;
+
+            if (job_temp->is_bg)
+                job_display(job_temp, true, false, job_id, STDOUT_FILENO);
 
             /* destroy the job */
             job_destroy(job_temp);

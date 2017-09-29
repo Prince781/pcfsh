@@ -875,6 +875,7 @@ void job_destroy(struct job *jb)
 
         for (size_t i = 0; p->argv[i] != NULL; ++i)
             free(p->argv[i]);
+        free(p->argv);
         free(p);
 
         p = p_next;

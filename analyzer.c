@@ -136,7 +136,7 @@ static struct an_pipeline *get_pipeline(struct parse *tree)
     list_append(pathnodes, child);
 
     while (pathnodes->size != 0) {
-        struct parse *node = list_remove_end(pathnodes);
+        struct parse *node = list_remove_start(pathnodes);
 
         switch (node->type) {
             case PROD_PIPELINE_TAIL:

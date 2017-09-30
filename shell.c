@@ -101,14 +101,15 @@ struct builtin builtins[] = {
     { NULL, NULL, NULL }
 };
 
+/*
 static void sighandler(int signum, siginfo_t *info, void *context)
 {
     if (signum == SIGCHLD) {
         if (info->si_code != CLD_CONTINUED) {
-            /* TODO */
         }
     }
 }
+*/
 
 /**
  * Note: some of the basic ideas come from this helpful resource:
@@ -154,6 +155,7 @@ void pcfsh_init(void)
         tcgetattr(shell_input_fd, &term_attrs);
 
         /* register signal handler */
+        /*
         struct sigaction sa;
 
         sa.sa_sigaction = sighandler;
@@ -161,6 +163,10 @@ void pcfsh_init(void)
         sa.sa_flags = SA_RESTART | SA_SIGINFO;
 
         sigaction(SIGCHLD, &sa, NULL);
+        */
+
+        /* cleanup all jobs on exit */
+        atexit(&jobs_cleanup);
     }
 }
 
@@ -852,6 +858,25 @@ void jobs_notifications(void)
 
         jb = &(*jb)->next;
         ++job_id;
+    }
+}
+
+void jobs_cleanup(void)
+{
+    /**
+     * If this was setup with atexit(3), we check that this
+     * function is not being called from a child process of the
+     * shell, which could happen if an exec(2) failed in a child process
+     * and it calls exit(2).
+     */
+    if (getpid() != shell_pgid)
+        return;
+
+    while (jobs != NULL) {
+        struct job *next = jobs->next;
+        kill(-jobs->pgid, SIGKILL);
+        job_destroy(jobs);
+        jobs = next;
     }
 }
 

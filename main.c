@@ -58,5 +58,8 @@ int main(int argc, char *argv[])
 
     free(line);
 
+    /**
+     * jobs_cleanup() should be called here.
+     */
     return 0;
 }

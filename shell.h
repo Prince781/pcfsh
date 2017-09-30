@@ -82,20 +82,42 @@ bool job_is_internal(const struct job *jb);
  */
 void job_wait(struct job *jb);
 
+/**
+ * Place the job in the foreground and wait for it.
+ * If {@to_continue} is true, this will send SIGCONT to the job,
+ * and attempt to restore the terminal state.
+ */
 void job_background(const struct job *jb, bool to_continue);
 
+/**
+ * Place a job in the background. If {@to_continue} is true, this
+ * will send SIGCONT to the job.
+ */
 void job_foreground(struct job *jb, bool to_continue);
 
+/**
+ * Continue a job. If {@background} is true, places the job
+ * in the background.
+ */
 void job_continue(struct job *jb, bool background);
 
+/**
+ * If there are any finished jobs, reaps them. Then displays
+ * information about any jobs that have changed state
+ * since the last time this was called.
+ */
 void jobs_notifications(void);
 
-void job_destroy(struct job *jb);
+/**
+ * Should only be called on program termination.
+ * This sends a SIGKILL to all running child processes
+ * before termination.
+ */
+void jobs_cleanup(void);
 
-/** history **/
-struct histentry {
-    char *line;
-};
-/** end of history stuff **/
+/**
+ * Frees all information associated with a job.
+ */
+void job_destroy(struct job *jb);
 
 #endif

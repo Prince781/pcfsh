@@ -1,0 +1,6 @@
+[x] internal commands (exit, fg, bg, jobs, cd)
+[x] kill all background processes on exit
+[ ] tab-completion?
+[ ] parse out comments?
+[ ] replace environment variables ($var)?
+[ ] advanced syntax (for, while, if)?

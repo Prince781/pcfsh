@@ -116,7 +116,7 @@ void jobs_notifications(void);
 void jobs_cleanup(void);
 
 /**
- * Frees all information associated with a job.
+ * Frees all resources associated with a job.
  */
 void job_destroy(struct job *jb);
 

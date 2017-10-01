@@ -612,9 +612,8 @@ int job_exec(struct an_pipeline *pln)
         if (p->next != NULL) {
             if (pipe(pipefds) < 0) {
                 perror("pipe()");
-                /* TODO: don't terminate:
-                 * 1. kill all running processes
-                 * 2. free all data
+                /**
+                 * If opening a pipe fails, then I guess we're in big trouble.
                  */
                 exit(EXIT_FAILURE);
             }
@@ -633,7 +632,12 @@ int job_exec(struct an_pipeline *pln)
             if (child_pid < 0) {
                 /* fork failed */
                 perror("fork()");
-                /* TODO: don't terminate */
+                /**
+                 * fork() *COULD* fail, but:
+                 * - limit for NPROC is 63k
+                 * - if memory is exhausted then there are more problems ahead
+                 * Maybe it's not worth it to try to recover gracefully.
+                 */
                 exit(EXIT_FAILURE);
             } else if (child_pid == 0) {
                 /* child */

@@ -286,7 +286,6 @@ static struct parse *rdparse_NAME(const struct link **list,
     struct token *cur_tk;
 
     if (*list == NULL || !match_NAME(cur_tk = (*list)->data)) {
-        /* TODO */
         errlist_ppnd(err_listp, cur_tk->lineno, cur_tk->charno,
                 "Expected an argument, a string, or a path.");
         return NULL;

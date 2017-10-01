@@ -5,7 +5,7 @@ pcfsh
 [Princeton Ferro](mailto:pferro@u.rochester.edu)
 
 # Commands Supported
-Supported commands are `cd`, `fg`, `bg`, `jobs`, and `exit`. These are implemented according to the POSIX standards defined in the manpages. Type `help` to get a list of these commands and their usage.
+Supported commands are `cd`, `fg`, `bg`, `jobs`, and `exit`. These are implemented according to the POSIX standards defined in the manpages (except not for `cd`). Type `help` to get a list of these commands and their usage.
 
 # How it works
 1. user gives input

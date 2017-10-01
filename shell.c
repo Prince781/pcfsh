@@ -219,8 +219,10 @@ static void job_display(const struct job *jb,
         snprintf(buf, sizeof(buf), "[%ld] ", curjob);
         padding = strlen(buf);
         write(outfile, buf, padding);
+        padding += 2;
         snprintf(padbuf, sizeof(padbuf), "%*s", (int) padding, " ");
 
+        /* show all processes in the job, one on each line */
         for (struct proc *p = jb->procs; p != NULL; p = p->next) {
             if (p != jb->procs)
                 write(outfile, padbuf, padding);
@@ -585,15 +587,22 @@ int job_exec(struct an_pipeline *pln)
 
         anproc = lnk->data;
 
+        if (lnk != pln->procs->head) {
+            jb->cmdline = realloc(jb->cmdline, cmdline_size + 2);
+            strcat(jb->cmdline, " |");
+            cmdline_size += 2;
+        }
+
         proc = calloc(1, sizeof(*proc));
         proc->argv = calloc(anproc->num_args, sizeof(proc->argv[0]));
         for (size_t i=0; i<anproc->num_args; ++i) {
             proc->argv[i] = anproc->args[i] != NULL ? strdup(anproc->args[i]) : NULL;
             if (proc->argv[i] != NULL) {
-                size_t arglen = strlen(proc->argv[i]) + 1;
+                size_t arglen = 1 + strlen(proc->argv[i]);
 
                 jb->cmdline = realloc(jb->cmdline, cmdline_size + arglen);
-                strncat(&jb->cmdline[cmdline_size-1], proc->argv[i], arglen-1);
+                strcat(jb->cmdline, " ");
+                strcat(jb->cmdline, proc->argv[i]);
                 cmdline_size += arglen;
             }
         }
@@ -602,6 +611,27 @@ int job_exec(struct an_pipeline *pln)
         *lastp = proc;
         lastp = &(*lastp)->next;
     }
+
+    /* add redirection operators to cmdline */
+
+    if (pln->file_in != NULL) {
+        size_t len = 3 + strlen(pln->file_in->fname);
+
+        jb->cmdline = realloc(jb->cmdline, cmdline_size + len);
+        strcat(jb->cmdline, " < ");
+        strcat(jb->cmdline, pln->file_in->fname);
+        cmdline_size += len;
+    }
+
+    if (pln->file_out != NULL) {
+        size_t len = 3 + strlen(pln->file_out->fname);
+
+        jb->cmdline = realloc(jb->cmdline, cmdline_size + len);
+        strcat(jb->cmdline, " > ");
+        strcat(jb->cmdline, pln->file_out->fname);
+        cmdline_size += len;
+    }
+
 
     /* now create the actual processes */
     for (struct proc *p = jb->procs; p != NULL; p = p->next) {

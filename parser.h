@@ -97,7 +97,7 @@ extern size_t num_lines;
 void token_destroy(struct token *tk);
 
 /**
- * Returns a NULL-terminated array of tokens.
+ * Returns a list of tokens.
  * Advances *{@input} right after the last token.
  */
 struct llist *tokenize(const char **input);
@@ -133,7 +133,7 @@ enum prod {
     PROD_LINE,
     PROD_LINES_LIST,
     PROD_PROGRAM,
-    /* for when we are at a leaf */
+    /* for when we are at a terminal */
     PROD_TERMINAL
 };
 
@@ -185,7 +185,9 @@ struct parse *rdparser(const struct llist *tokens, struct parse_error **err_list
 int prstree_empty(struct parse *tree);
 
 /**
- * Prints out a parse tree and generates a graph.
+ * Prints out a graph to a temporary file,
+ * which can then be parsed by dot(1) to generate an image.
+ * $ /bin/dot -Tpng /tmp/file9QiWe1 -o /tmp/graph.png
  */
 void prstree_debug(struct parse *tree);
 /** end of parser stuff **/

@@ -59,16 +59,28 @@ struct job {
     struct job *next;
 };
 
+/**
+ * Initializes the shell.
+ */
 void pcfsh_init(void);
 
+/**
+ * Displays the prompt string.
+ */
 void pcfsh_prefix(const char *str);
 
+/**
+ * Creates a new job. Returns zero on success, negative on failure.
+ */
 int job_exec(struct an_pipeline *pln);
 
 /* Returns true if all processes
  * in the job have stopped. */
 bool job_stopped(const struct job *jb);
 
+/**
+ * Returns true if the job is finished (all processes have finished).
+ */
 bool job_finished(const struct job *jb);
 
 /**
